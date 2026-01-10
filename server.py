@@ -8,6 +8,36 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Hardcoded path for now
 COMPANY_FILE = "companyinfo"
+POLICY_FILE = "policy"
+
+@mcp.tool()
+async def load_file() -> str:
+    """
+    Loads the policy file and returns its content.
+    """
+    try:
+        with open(POLICY_FILE, "r") as f:
+            content = f.read()
+        return f"File loaded successfully. Content:\n\n{content}"
+    except FileNotFoundError:
+        return f"Error: The file '{POLICY_FILE}' was not found. It will be created when you save content."
+    except Exception as e:
+        return f"Error loading file: {str(e)}"
+
+@mcp.tool()
+async def save_file(content: str) -> str:
+    """
+    Saves content to the policy file.
+    
+    Args:
+        content: The content to save to the policy file.
+    """
+    try:
+        with open(POLICY_FILE, "w") as f:
+            f.write(content)
+        return f"File saved successfully to '{POLICY_FILE}'."
+    except Exception as e:
+        return f"Error saving file: {str(e)}"
 
 @mcp.tool()
 async def ask_chatgpt(question: str) -> str:
