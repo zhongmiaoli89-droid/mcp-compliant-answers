@@ -1,14 +1,53 @@
 import os
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from openai import OpenAI
 
-# 1. Initialize FastMCP and OpenAI
+# Configuration
+COMPANY_NAME = "NexusFlow"
+KNOWLEDGE_BASE_DIR = "knowledge_base"
+COMPANY_INFO_FILENAME = "companyinfo"
+POLICY_FILENAME = "policy"
+
+# Initialize FastMCP and OpenAI
 mcp = FastMCP("Company-Knowledge-Relay")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Hardcoded path for now
-COMPANY_FILE = "companyinfo"
-POLICY_FILE = "policy"
+
+def _get_company_base_path() -> Path:
+    """
+    Gets the base path for the company's knowledge base folder.
+    This enforces that all files are loaded from a single company folder.
+    
+    Returns:
+        Path object pointing to knowledge_base/{COMPANY_NAME}/
+        
+    Raises:
+        ValueError: If COMPANY_NAME is not set or invalid
+    """
+    if not COMPANY_NAME:
+        raise ValueError("COMPANY_NAME must be set")
+    
+    base_path = Path(KNOWLEDGE_BASE_DIR) / COMPANY_NAME
+    
+    # Ensure the directory exists
+    base_path.mkdir(parents=True, exist_ok=True)
+    
+    return base_path
+
+
+def _get_company_file_path(filename: str) -> Path:
+    """
+    Gets the full path to a file in the company's knowledge base folder.
+    This enforces that files are only loaded from the designated company folder.
+    
+    Args:
+        filename: Name of the file (e.g., "companyinfo", "policy")
+        
+    Returns:
+        Path object to the file in the company's knowledge base folder
+    """
+    return _get_company_base_path() / filename
 
 # Helper functions
 def _read_file(filepath: str, encoding: str = 'utf-8') -> str:
@@ -154,13 +193,16 @@ def _sanitize_answer(initial_answer: str, policy_content: str) -> str:
 @mcp.tool()
 async def load_file() -> str:
     """
-    Loads the policy file and returns its content.
+    Loads the policy file from the company's knowledge base folder and returns its content.
+    This function enforces loading only from knowledge_base/{COMPANY_NAME}/policy.
     """
     try:
-        content = _read_file(POLICY_FILE)
-        return f"File loaded successfully. Content:\n\n{content}"
+        policy_path = _get_company_file_path(POLICY_FILENAME)
+        content = _read_file(str(policy_path))
+        return f"File loaded successfully from {policy_path}. Content:\n\n{content}"
     except FileNotFoundError:
-        return f"Error: The file '{POLICY_FILE}' was not found. It will be created when you save content."
+        policy_path = _get_company_file_path(POLICY_FILENAME)
+        return f"Error: The file '{policy_path}' was not found. It will be created when you save content."
     except Exception as e:
         return f"Error loading file: {str(e)}"
 
@@ -168,15 +210,17 @@ async def load_file() -> str:
 @mcp.tool()
 async def save_file(content: str) -> str:
     """
-    Saves content to the policy file.
+    Saves content to the policy file in the company's knowledge base folder.
+    This function enforces saving only to knowledge_base/{COMPANY_NAME}/policy.
     
     Args:
         content: The content to save to the policy file.
     """
     try:
-        with open(POLICY_FILE, "w", encoding='utf-8') as f:
+        policy_path = _get_company_file_path(POLICY_FILENAME)
+        with open(policy_path, "w", encoding='utf-8') as f:
             f.write(content)
-        return f"File saved successfully to '{POLICY_FILE}'."
+        return f"File saved successfully to '{policy_path}'."
     except Exception as e:
         return f"Error saving file: {str(e)}"
 
@@ -184,9 +228,11 @@ async def save_file(content: str) -> str:
 @mcp.tool()
 async def ask_chatgpt(question: str) -> str:
     """
-    Answers questions using the 'companyinfo' file as the source of truth.
+    Answers questions using the 'companyinfo' file from the company's knowledge base folder.
     After getting the answer, it sanitizes the response using the policy file 
-    to remove any information that violates the policy.
+    from the same folder to remove any information that violates the policy.
+    
+    This function enforces loading files only from knowledge_base/{COMPANY_NAME}/.
     
     Args:
         question: The question to ask about the company
@@ -194,11 +240,13 @@ async def ask_chatgpt(question: str) -> str:
     Returns:
         Sanitized answer that complies with the privacy policy
     """
-    # Load company information
+    # Load company information from the company's knowledge base folder
     try:
-        context_data = _read_file(COMPANY_FILE)
+        company_info_path = _get_company_file_path(COMPANY_INFO_FILENAME)
+        context_data = _read_file(str(company_info_path))
     except FileNotFoundError:
-        return f"Error: The file '{COMPANY_FILE}' was not found in the server directory."
+        company_info_path = _get_company_file_path(COMPANY_INFO_FILENAME)
+        return f"Error: The file '{company_info_path}' was not found in the knowledge base folder."
     except Exception as e:
         return f"Error reading company file: {str(e)}"
 
@@ -208,9 +256,10 @@ async def ask_chatgpt(question: str) -> str:
     except Exception as e:
         return f"OpenAI API Error (initial answer): {str(e)}"
 
-    # Load policy for sanitization
+    # Load policy for sanitization from the company's knowledge base folder
     try:
-        policy_content = _read_file(POLICY_FILE, encoding='utf-8')
+        policy_path = _get_company_file_path(POLICY_FILENAME)
+        policy_content = _read_file(str(policy_path), encoding='utf-8')
     except FileNotFoundError:
         # If policy file doesn't exist, return unsanitized answer
         return initial_answer
