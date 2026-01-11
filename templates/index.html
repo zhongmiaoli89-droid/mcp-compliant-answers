@@ -169,6 +169,41 @@
             align-items: center;
         }
 
+        .company-selector {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .company-selector label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            min-width: 200px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        select:hover {
+            border-color: #ccc;
+        }
+
         .loading {
             display: inline-block;
             width: 16px;
@@ -207,9 +242,15 @@
             <p>Read and update the policy file</p>
         </div>
         <div class="content">
+            <div class="company-selector">
+                <label for="companySelect">Company:</label>
+                <select id="companySelect" onchange="onCompanyChange()">
+                    <option value="">Loading companies...</option>
+                </select>
+            </div>
             <div class="toolbar">
                 <div class="file-info">
-                    <span>File: <strong>knowledge_base/NexusFlow/policy</strong></span>
+                    <span>File: <strong id="filePath">Select a company to view file path</strong></span>
                 </div>
                 <div class="buttons">
                     <button class="btn-secondary" onclick="loadFile()" id="loadBtn">
@@ -221,7 +262,7 @@
                 </div>
             </div>
             <div id="status" class="status"></div>
-            <textarea id="policyContent" placeholder="Click 'Load File' to load the policy file, or start typing to create new content..."></textarea>
+            <textarea id="policyContent" placeholder="Select a company and click 'Load File' to load the policy file, or start typing to create new content..."></textarea>
             <div class="file-info">
                 <span id="charCount">0 characters</span>
                 <span id="lastSaved"></span>
@@ -236,6 +277,60 @@
         const saveBtn = document.getElementById('saveBtn');
         const charCount = document.getElementById('charCount');
         const lastSaved = document.getElementById('lastSaved');
+        const companySelect = document.getElementById('companySelect');
+        const filePath = document.getElementById('filePath');
+        let currentCompany = '';
+
+        // Load companies on page load
+        async function loadCompanies() {
+            try {
+                const response = await fetch('/api/companies');
+                const data = await response.json();
+
+                if (data.success && data.companies && data.companies.length > 0) {
+                    companySelect.innerHTML = '<option value="">-- Select a company --</option>';
+                    data.companies.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company;
+                        option.textContent = company;
+                        companySelect.appendChild(option);
+                    });
+                    
+                    // Auto-select first company if available
+                    if (data.companies.length === 1) {
+                        companySelect.value = data.companies[0];
+                        onCompanyChange();
+                    }
+                } else {
+                    companySelect.innerHTML = '<option value="">No companies found</option>';
+                    showStatus('No companies found in knowledge base. Please create a company folder first.', 'error');
+                }
+            } catch (error) {
+                companySelect.innerHTML = '<option value="">Error loading companies</option>';
+                showStatus(`Error loading companies: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle company selection change
+        function onCompanyChange() {
+            currentCompany = companySelect.value;
+            if (currentCompany) {
+                filePath.textContent = `knowledge_base/${currentCompany}/policy`;
+                // Clear content when switching companies
+                policyContent.value = '';
+                charCount.textContent = '0 characters';
+                lastSaved.textContent = '';
+                loadBtn.disabled = false;
+                saveBtn.disabled = false;
+            } else {
+                filePath.textContent = 'knowledge_base/{company}/policy';
+                policyContent.value = '';
+                charCount.textContent = '0 characters';
+                lastSaved.textContent = '';
+                loadBtn.disabled = true;
+                saveBtn.disabled = true;
+            }
+        }
 
         // Update character count
         policyContent.addEventListener('input', () => {
@@ -244,12 +339,17 @@
 
         // Load file function
         async function loadFile() {
+            if (!currentCompany) {
+                showStatus('Please select a company first', 'error');
+                return;
+            }
+
             loadBtn.disabled = true;
             loadBtn.innerHTML = '<span class="loading"></span> Loading...';
             showStatus('Loading file...', 'info');
 
             try {
-                const response = await fetch('/api/policy');
+                const response = await fetch(`/api/policy?company=${encodeURIComponent(currentCompany)}`);
                 const data = await response.json();
 
                 if (data.success) {
@@ -270,6 +370,11 @@
 
         // Save file function
         async function saveFile() {
+            if (!currentCompany) {
+                showStatus('Please select a company first', 'error');
+                return;
+            }
+
             const content = policyContent.value;
             saveBtn.disabled = true;
             saveBtn.innerHTML = '<span class="loading"></span> Saving...';
@@ -281,7 +386,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ content: content })
+                    body: JSON.stringify({ 
+                        company: currentCompany,
+                        content: content 
+                    })
                 });
 
                 const data = await response.json();
@@ -312,9 +420,11 @@
             }
         }
 
-        // Load file on page load
+        // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
-            loadFile();
+            loadCompanies();
+            loadBtn.disabled = true;
+            saveBtn.disabled = true;
         });
     </script>
 </body>
