@@ -253,16 +253,13 @@
                     <span>File: <strong id="filePath">Select a company to view file path</strong></span>
                 </div>
                 <div class="buttons">
-                    <button class="btn-secondary" onclick="loadFile()" id="loadBtn">
-                        <span>🔄</span> Load File
-                    </button>
                     <button class="btn-success" onclick="saveFile()" id="saveBtn">
                         <span>💾</span> Save File
                     </button>
                 </div>
             </div>
             <div id="status" class="status"></div>
-            <textarea id="policyContent" placeholder="Select a company and click 'Load File' to load the policy file, or start typing to create new content..."></textarea>
+            <textarea id="policyContent" placeholder="Select a company to automatically load the policy file, or start typing to create new content..."></textarea>
             <div class="file-info">
                 <span id="charCount">0 characters</span>
                 <span id="lastSaved"></span>
@@ -273,7 +270,6 @@
     <script>
         const policyContent = document.getElementById('policyContent');
         const statusDiv = document.getElementById('status');
-        const loadBtn = document.getElementById('loadBtn');
         const saveBtn = document.getElementById('saveBtn');
         const charCount = document.getElementById('charCount');
         const lastSaved = document.getElementById('lastSaved');
@@ -312,22 +308,18 @@
         }
 
         // Handle company selection change
-        function onCompanyChange() {
+        async function onCompanyChange() {
             currentCompany = companySelect.value;
             if (currentCompany) {
                 filePath.textContent = `knowledge_base/${currentCompany}/policy`;
-                // Clear content when switching companies
-                policyContent.value = '';
-                charCount.textContent = '0 characters';
-                lastSaved.textContent = '';
-                loadBtn.disabled = false;
                 saveBtn.disabled = false;
+                // Automatically load the file when company is selected
+                await loadFile();
             } else {
                 filePath.textContent = 'knowledge_base/{company}/policy';
                 policyContent.value = '';
                 charCount.textContent = '0 characters';
                 lastSaved.textContent = '';
-                loadBtn.disabled = true;
                 saveBtn.disabled = true;
             }
         }
@@ -340,13 +332,11 @@
         // Load file function
         async function loadFile() {
             if (!currentCompany) {
-                showStatus('Please select a company first', 'error');
                 return;
             }
 
-            loadBtn.disabled = true;
-            loadBtn.innerHTML = '<span class="loading"></span> Loading...';
             showStatus('Loading file...', 'info');
+            saveBtn.disabled = true;
 
             try {
                 const response = await fetch(`/api/policy?company=${encodeURIComponent(currentCompany)}`);
@@ -363,8 +353,7 @@
             } catch (error) {
                 showStatus(`Error loading file: ${error.message}`, 'error');
             } finally {
-                loadBtn.disabled = false;
-                loadBtn.innerHTML = '<span>🔄</span> Load File';
+                saveBtn.disabled = false;
             }
         }
 
@@ -423,7 +412,6 @@
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadCompanies();
-            loadBtn.disabled = true;
             saveBtn.disabled = true;
         });
     </script>
